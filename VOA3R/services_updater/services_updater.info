@@ -1,0 +1,6 @@
+name = VOA3R Services Updater
+description = VOA3R Updater (Services mode)
+dependencies[] = services (>3.4)
+package = VOA3R
+core = 7.x
+version = "7.x-1.x-dev"

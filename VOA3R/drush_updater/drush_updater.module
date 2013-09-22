@@ -1,0 +1,20 @@
+<?php
+
+/**
+ * @file drush_updater.module
+ * TODO: Enter file description here.
+ */
+
+
+/**
+ * Implements hook_help().
+ */
+function drush_updater_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#drush_updater':
+      return t("This command mass-insert VOA3R content into the web");
+
+    // OPTIONAL: Add additional cases for other paths that should display help text.
+  }
+}
+

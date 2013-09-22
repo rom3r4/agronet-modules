@@ -1,0 +1,276 @@
+<?php
+// $Id: calendar_block.module,v 1.4.2.1 2009/01/20 08:46:24 skilip Exp $
+
+/**
+ * @file
+ * This module provides a fully customizale calendar block.
+ *
+ * You can set the actions for the dates by using hook_calendar_block(&$day, $op).
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function calendar_block_menu() {
+  $items['calendar_block_ajax'] = array(
+    'page callback' => 'calendar_block_ajax',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function calendar_block_block_info() {
+  $blocks['calendar'] = array(
+    'info' => t('Calendar'),
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_configure().
+ */
+function calendar_block_block_configure($delta = '') {
+  // Decide whether to show the days of the week or not
+  $form = array();
+  if ($delta == 'calendar') {
+    $form['show_weekdays'] = array(
+      '#type' => 'checkbox', 
+      '#title' => t('Display the days of the week'), 
+      '#default_value' => variable_get('calendar_block_show_weekdays', FALSE),
+      '#weight' => 5,
+    );
+  }
+  return $form;
+}
+
+function calendar_block_block_save($delta = '', $edit = array()) {
+  if ($delta == 'calendar') {
+    variable_set('calendar_block_show_weekdays', $edit['show_weekdays']);
+  }
+}
+/**
+ * Implements hook_block_view().
+ */
+function calendar_block_block_view($delta) {
+  $path = drupal_get_path('module', 'calendar_block');
+  $year = isset($_GET['calendar_block_year']) ? $_GET['calendar_block_year'] : NULL;
+  $month = isset($_GET['calendar_block_month']) ? $_GET['calendar_block_month'] : NULL;
+
+  return array(
+    'subject' => t('Calendar'),
+    'content' => array(
+      '#markup' => theme('calendar_block', array('calendar' => calendar_block_load($year, $month))),
+      '#attached' => array(
+        'css' => array($path . '/calendar_block.css' => array()),
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function calendar_block_theme() {
+  return array(
+    'calendar_block' => array(
+      'render element' => 'elements',
+      'template' => 'calendar_block',
+    ),
+  );
+}
+
+/**
+ *
+ */
+function calendar_block_load($year = NULL, $month = NULL) {
+  $first_day = variable_get('date_first_day', 0);
+  $weekdays = array('su', 'mo', 'tu', 'we', 'th', 'fr', 'sa');
+  $weekdays = array_merge(array_slice($weekdays, $first_day), array_slice($weekdays, 0, $first_day));
+  $weekdays = array_combine($weekdays, $weekdays);
+
+  $calendar = (object) array(
+    'year' => $year ? (int) $year : date('Y'),
+    'month' => $month ? (int) $month : date('m'),
+    'weekdays' => $weekdays,
+  );
+  $calendar->show_weekdays = variable_get('calendar_block_show_weekdays', TRUE);
+
+  $date = (object) array();
+  // Give other modules the opportunity set the date for the calendar
+  drupal_alter('calendar_block_date', $calendar, $date);
+
+  $calendar->timestamp = ($calendar->year && $calendar->month) ? mktime(1, 1, 1, $calendar->month, 1, $calendar->year) : REQUEST_TIME;
+
+  $weekdays = array_keys($calendar->weekdays);
+
+  $calendar->month = date('m', $calendar->timestamp); // The numeric current month (09)
+  $calendar->year = date('Y', $calendar->timestamp); // The numeric current year (2008)
+
+  // If the month is equal to the current month, get the current day
+  if (date('Y-m', $calendar->timestamp) == date('Y-m')) {
+    $calendar->day = date('d', REQUEST_TIME); // The numeric current day (20)
+  }
+
+  $calendar->month_str = date('F', $calendar->timestamp); // The current month (September)
+  $calendar->days_in_month = cal_days_in_month(0, $calendar->month, $calendar->year); // The number of days in this month (31)
+  $calendar->first_day_of_month = drupal_substr(drupal_strtolower(date('D', mktime(0, 0, 0, $calendar->month, 1, $calendar->year))), 0, 2); // The first week day of this month (mo, tu, we ....)
+
+  // If the first day of the month is not the same as the first day in the weekdays, set in the configuration settings,
+  // we need to set the last days of the previous month first
+  if ($calendar->show_weekdays) {
+    if ($calendar->first_day_of_month !== $weekdays[0]) {
+      $prev_month = ($calendar->month > 1) ? $calendar->month -1 : 12;
+      $prev_year = ($calendar->month > 1) ? $calendar->year : $calendar->year - 1;
+  
+      $tmp_array = $weekdays;
+      $tmp_array = array_flip($tmp_array);
+      $calendar->previous_days_offset = $tmp_array[$calendar->first_day_of_month];
+      $calendar->days_in_previous_month = cal_days_in_month(0, $prev_month, $prev_year);
+  
+      for ($i = $calendar->previous_days_offset - 1; $i > -1; $i--) {
+        $calendar->dates[] = (object) array(
+          'year' => $prev_year,
+          'month' => intval($prev_month),
+          'day' => $calendar->days_in_previous_month - $i,
+        );
+      }
+    }
+  }
+  // Here we'll set the days for the month we're viewing
+  for ($i = $calendar->days_in_month - 1; $i > -1; $i--) {
+    $calendar->dates[] = (object) array(
+      'year' => $calendar->year,
+      'month' => intval($calendar->month),
+      'day' => $calendar->days_in_month - $i,
+    );
+  }
+
+  if ($calendar->show_weekdays) {
+    // If the number of added dates is not dividable by 7, we need to add some more dates for the next month
+    while ((count($calendar->dates)) / 7 < ceil(count($calendar->dates) / 7)) {
+      $counter = isset($counter) ? $counter + 1 : 1;
+      if (!isset($next_month)) {
+        $next_month = ($calendar->month < 12) ? $calendar->month + 1 : 1;
+      }
+      $calendar->dates[] = (object) array(
+        'year' => ($calendar->month < 12 ? $calendar->year : $calendar->year + 1),
+        'month' => intval($next_month),
+        'day' => $counter,
+      );
+    }
+  }
+
+  foreach ($calendar->dates as $i => $date) {
+    $calendar->dates[$i]->timestamp = mktime(1, 1, 1, $date->month, $date->day, $date->year);
+  }
+  return $calendar;
+}
+
+/**
+ * Theme the calendar.
+ */
+function calendar_block_preprocess_calendar_block(&$variables) {
+  $calendar = $variables['calendar'];
+
+  $weekdays = array_values($calendar->weekdays);
+
+  $variables['header'] = format_date($calendar->timestamp, 'custom', 'F Y');
+  $variables['prev_class'] = ($calendar->month > 1 ? ($calendar->month - 1) . '-' . $calendar->year : '12-' . ($calendar->year - 1));
+  $variables['next_class'] = ($calendar->month < 12 ? ($calendar->month + 1) . '-' . $calendar->year : '01-' . ($calendar->year + 1));
+  
+  $next_month = ($calendar->month < 12 ? ($calendar->month + 1) : 1);
+  $prev_month = ($calendar->month > 1 ? ($calendar->month - 1) : 12);
+  $year_next = ($next_month == 1 ? ($calendar->year + 1) : $calendar->year);
+  $year_prev = ($prev_month == 12 ? ($calendar->year - 1) : $calendar->year);
+
+  $variables['previous_link'] = l('<', $_GET['q'], array('query' => array(
+    'calendar_block_month' => $prev_month,
+    'calendar_block_year' => $year_prev,
+  )));
+  $variables['next_link'] = l('>', $_GET['q'], array('query' => array(
+    'calendar_block_month' => $next_month,
+    'calendar_block_year' => $year_next,
+  )));
+
+  if ($calendar->show_weekdays) {
+    // Create the weekdays row
+    foreach (array_values($calendar->weekdays) as $i => $day) {
+      $variables['rows_weekdays'][$i] = array(
+        'data' => t($day),
+        'attributes' => array('class' => array('hok', 'top', (($i == 0) ? 'first' : (($i == 6) ? 'last' : '')))),
+      );
+    }
+  }
+
+  $variables['rows_dates'] = array();
+
+  foreach ($calendar->dates as $i => $date) {
+    $key_row = floor(($i) / 7);
+    $element = array(
+      '#date' => $date,
+      '#markup' => '<span>' . $date->day . '</span>',
+      '#suffix' => '<div class="border_bottom"></div>',
+      '#attributes' => array('class' => array('hok', format_date($date->timestamp, 'custom', 'm-j-Y'))),
+    );
+
+    if (!isset($variables['rows_dates'][$key_row])) {
+      $key_column = 0;
+      $variables['rows_dates'][$key_row] = array(
+        'attributes' => array(
+          'class' => array('week'),
+          'id' => 'calendar_row' . ($key_row + 1),
+        ),
+      );
+
+      if ($key_row == 0) {
+        $variables['rows_dates'][$key_row]['attributes']['class'][] = 'first';
+      }
+      if ($key_row == (ceil(count($calendar->dates) / 7) - 1)) {
+        $variables['rows_dates'][$key_row]['attributes']['class'][] = 'last';
+      }
+    }
+
+    if ($key_column == 0) {
+      $element['#attributes']['class'][] = 'first';
+    }
+
+    if ($key_column == 6) {
+      $element['#attributes']['class'][] = 'last';
+    }
+    else {
+      $element['#suffix'] .= '';
+    }
+
+    if ($date->month !== intval($calendar->month)) {
+      $element['#attributes']['class'][] = 'disabled';
+    }
+
+    if ((isset($calendar->day) && $date->day == $calendar->day) && ($date->month == $calendar->month) && ($date->year == $calendar->year)) {
+      $element['#attributes']['class'][] = 'today';
+    }
+
+    // Give other modules the opportunity to change the content for each date
+    drupal_alter('calendar_block_element', $element);
+
+    $variables['rows_dates'][$key_row]['data'][$key_column] = $element;
+
+    $key_column++;
+  }
+}
+
+/**
+ * Calendar days in month
+ *
+ * Some PHP versions don't have cal_days_in_month(), this accounts for that.
+ */
+if (!function_exists('cal_days_in_month')) {
+  function cal_days_in_month($calendar, $month, $year) {
+    // $calendar just gets ignored, assume gregorian
+    // calculate number of days in a month
+    return $month == 2 ? ($year % 4 ? 28 : ($year % 100 ? 29 : ($year % 400 ? 28 : 29))) : (($month - 1) % 7 % 2 ? 30 : 31);
+  }
+}

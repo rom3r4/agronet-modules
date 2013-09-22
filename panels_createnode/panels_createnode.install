@@ -1,0 +1,24 @@
+<?php
+/**
+ * @file
+ * Installation file for Panels CreateNode.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function panels_createnode_install() {
+  $nodetypes = node_type_get_names();
+  foreach ($nodetypes as $key => $name) {
+    $nodetypes[$key] = $key;
+  }
+  variable_set('panels_createnode_nodetypes', $nodetypes);
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function panels_createnode_uninstall() {
+  variable_del('panels_createnode_nodetypes');
+  variable_del('panels_createnode_viewmode');
+}

@@ -1,0 +1,78 @@
+<?php
+
+/**
+ * @file
+ *
+ * This module allows the user to create (and attach) nodes on the fly within the "Add content" window of "panel content" pages.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function panels_createnode_menu() {
+  $items = array();
+
+  $items['admin/structure/panels/settings/panels_createnode'] = array(
+    'title' => 'Panels CreateNode Settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('panels_createnode_settings'),
+    'access arguments' => array('use panels dashboard'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+/**
+ * Settings page.
+ */
+function panels_createnode_settings($form_state) {
+  $form = array();
+
+  $nodetypes = node_type_get_names();
+  $form['panels_createnode_nodetypes'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Node types'),
+    '#description' => t('Select node types that can be created in the "Add content" window of panels. <br/>If the user doesn\'t have permission to create a certain node type, it won\'t be listed.'),
+    '#default_value' => variable_get('panels_createnode_nodetypes', array()),
+    '#options' => $nodetypes,
+  );
+
+  $view_modes = array();
+  $node_entity_info = entity_get_info('node');
+  foreach ($node_entity_info['view modes'] as $key => $view_mode) {
+    $view_modes[$key] = $view_mode['label'];
+  }
+
+  $form['panels_createnode_viewmode'] = array(
+    '#type' => 'select',
+    '#title' => t('Node default view mode'),
+    '#default_value' => variable_get('panels_createnode_viewmode', 'full'),
+    '#description' => t('View mode, e.g. "full", "teaser"...'),
+    '#options' => $view_modes,
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+ * Implements hook_permission().
+ */
+function panels_createnode_permission() {
+  return array(
+    'control node view' => array(
+      'title' => t("Control node view"),
+      'description' => t('If the user doesn\'t have "Control node view" permissions, the "Node view mode settings" fieldset won\'t be displayed when creating a node. In this case default values will be used.'),
+    ),
+  );
+}
+
+
+/**
+ * Implements hook_ctools_plugin_directory().
+ */
+function panels_createnode_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'ctools' && $plugin == 'content_types') {
+    return 'plugins/' . $plugin;
+  }
+}

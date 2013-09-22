@@ -1,0 +1,12 @@
+name = Panels CreateNode
+description = Allows the user to create (and attach) nodes on the fly within the "Add content" window of panels.
+core = 7.x
+package = "Panels"
+dependencies[] = panels
+
+; Information added by drupal.org packaging script on 2013-05-25
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "panels_createnode"
+datestamp = "1369449336"
+

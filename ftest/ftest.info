@@ -1,0 +1,10 @@
+name = ftest
+description = ftest
+core = 7.x
+package = Features
+version = 7.x-1.0
+project = ftest
+dependencies[] = text
+features[features_api][] = api:2
+features[field_base][] = field_test
+features_exclude[dependencies][features] = features

@@ -1,0 +1,6 @@
+name = VOA3R Drush Updater
+description = VOA3R Updater (Drush mode)
+dependencies[] = system (>7.10)
+package = VOA3R
+core = 7.x
+version = "7.x-1.x-dev"
