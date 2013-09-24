@@ -1,7 +1,0 @@
-<?php
-/**
- * @file
- * Code for the test1 feature.
- */
-
-include_once 'test1.features.inc';

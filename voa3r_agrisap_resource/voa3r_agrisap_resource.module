@@ -1,7 +1,0 @@
-<?php
-/**
- * @file
- * Code for the voa3r-agrisap-resource feature.
- */
-
-include_once 'voa3r_agrisap_resource.features.inc';
