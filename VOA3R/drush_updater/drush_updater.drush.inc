@@ -389,9 +389,12 @@ function drush_drush_updater_helper()
     explode(',', drush_get_option('data')) : array();
 
 
-  $user_ids = array(1, 2, 3, 4, 5, 6, 7);
-  $random_id = array_rand($user_ids);
-  $random_id = 6;
+  // $user_ids = array(1, 2, 3, 4, 5, 6, 7);
+  // $random_id = array_rand($user_ids);
+  // $random_id = 6;
+  
+  // Content creator D fixed to admin user, Avoidin so problems with databes migration
+  $random_id = 1;
 
   $i = 0;
   // do some business logic to load your data from where it is
