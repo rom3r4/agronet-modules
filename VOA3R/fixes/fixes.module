@@ -1,0 +1,119 @@
+<?php
+
+/**
+ * @file fixes.module
+ * TODO: Enter file description here.
+ */
+
+
+/**
+ * Implements hook_node_form_alter().
+ */
+functionn fixes_form_event_node_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+
+/**
+ * Implements hook_node_post_form_alter().
+ */
+functionn fixes_form_event_node_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+
+/**
+ * Implements hook_node_poll_form_alter().
+ */
+functionn fixes_form_poll_node_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+
+/**
+ * Implements hook_node_question_form_alter().
+ */
+functionn fixes_form_question_node_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+
+/**
+ * Implements hook_node_answer_form_alter().
+ */
+functionn fixes_form_answer_node_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+
+/**
+ * Implements hook_node_form_alter().
+ */
+functionn fixes_form_forum_node_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+
+/**
+ * Implements hook_node_form_alter().
+ */
+functionn fixes_form_resource_dc_node_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+
+/**
+ * Implements hook_node_form_alter().
+ */
+functionn fixes_form_resource_agrisap_node_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}

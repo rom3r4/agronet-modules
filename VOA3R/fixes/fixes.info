@@ -1,0 +1,6 @@
+name = VOA3R hooks
+description = VOA3R & Drupal Commons, general hooks & fixes
+dependencies[] = system 
+package = VOA3R
+core = 7.x
+version = "7.x-1.x-dev"
