@@ -7,6 +7,14 @@
 
 
 /**
+ * Implements hook_init
+ * runs on every http request
+ */
+function fixes_init() {
+   drupal_add_js(drupal_get_path('module', 'fixes').'/js/fixes.js', 'file');
+}
+
+/**
  * Implements hook_node_form_alter().
  */
 /*
@@ -99,7 +107,6 @@ function fixes_form_forum_form_alter(&$form, &$form_state, $form_id) {
 /**
  * Implements hook_node_form_alter().
  */
-/*
 function fixes_form_resourcedc_form_alter(&$form, &$form_state, $form_id) {
    //hide "group type" and "roles and permissions"
    $form['group_group']['#access'] = FALSE;
@@ -110,11 +117,10 @@ function fixes_form_resourcedc_form_alter(&$form, &$form_state, $form_id) {
    //hide the groups box for assigning content
    $form['group_audience']['#access'] = FALSE;
 }
-*/
+
 /**
  * Implements hook_node_form_alter().
  */
-/*
 function fixes_form_resource_agrisap_form_alter(&$form, &$form_state, $form_id) {
    //hide "group type" and "roles and permissions"
    $form['group_group']['#access'] = FALSE;
@@ -125,7 +131,7 @@ function fixes_form_resource_agrisap_form_alter(&$form, &$form_state, $form_id) 
    //hide the groups box for assigning content
    $form['group_audience']['#access'] = FALSE;
 }
-*/
+
 
 /**
  * Implements hook_node_form_alter().
@@ -169,7 +175,9 @@ function _voa3r_fixes_solrcount_helper() {
  */
 function fixes_form_apachesolr_search_custom_page_search_form_alter($form, &$form_state) {
   
-    $form['#token'] = FALSE;
+    // echo print_r($form,TRUE);
+    // drupal_goto("/");
+    // $form['#token'] = FALSE;
     $form['#submit'][] = '_fixes_solr_search_pre_callback';
     return $form;
 }
