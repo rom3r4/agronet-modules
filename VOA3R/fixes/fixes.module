@@ -9,7 +9,8 @@
 /**
  * Implements hook_node_form_alter().
  */
-functionn fixes_form_event_node_form_alter(&$form, &$form_state, $form_id) {
+/*
+function fixes_form_event_form_alter(&$form, &$form_state, $form_id) {
    //hide "group type" and "roles and permissions"
    $form['group_group']['#access'] = FALSE;
    
@@ -19,11 +20,12 @@ functionn fixes_form_event_node_form_alter(&$form, &$form_state, $form_id) {
    //hide the groups box for assigning content
    $form['group_audience']['#access'] = FALSE;
 }
-
+*/
 /**
  * Implements hook_node_post_form_alter().
  */
-functionn fixes_form_event_node_form_alter(&$form, &$form_state, $form_id) {
+/*
+function fixes_form_event_form_alter(&$form, &$form_state, $form_id) {
    //hide "group type" and "roles and permissions"
    $form['group_group']['#access'] = FALSE;
    
@@ -33,11 +35,12 @@ functionn fixes_form_event_node_form_alter(&$form, &$form_state, $form_id) {
    //hide the groups box for assigning content
    $form['group_audience']['#access'] = FALSE;
 }
-
+*/
 /**
  * Implements hook_node_poll_form_alter().
  */
-functionn fixes_form_poll_node_form_alter(&$form, &$form_state, $form_id) {
+/*
+function fixes_form_poll_form_alter(&$form, &$form_state, $form_id) {
    //hide "group type" and "roles and permissions"
    $form['group_group']['#access'] = FALSE;
    
@@ -47,11 +50,12 @@ functionn fixes_form_poll_node_form_alter(&$form, &$form_state, $form_id) {
    //hide the groups box for assigning content
    $form['group_audience']['#access'] = FALSE;
 }
-
+*/
 /**
  * Implements hook_node_question_form_alter().
  */
-functionn fixes_form_question_node_form_alter(&$form, &$form_state, $form_id) {
+/* 
+function fixes_form_question_form_alter(&$form, &$form_state, $form_id) {
    //hide "group type" and "roles and permissions"
    $form['group_group']['#access'] = FALSE;
    
@@ -61,11 +65,73 @@ functionn fixes_form_question_node_form_alter(&$form, &$form_state, $form_id) {
    //hide the groups box for assigning content
    $form['group_audience']['#access'] = FALSE;
 }
-
+*/
 /**
  * Implements hook_node_answer_form_alter().
  */
-functionn fixes_form_answer_node_form_alter(&$form, &$form_state, $form_id) {
+/*
+function fixes_form_answer_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+*/
+/**
+ * Implements hook_node_form_alter().
+ */
+/*
+function fixes_form_forum_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+*/
+/**
+ * Implements hook_node_form_alter().
+ */
+/*
+function fixes_form_resourcedc_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+*/
+/**
+ * Implements hook_node_form_alter().
+ */
+/*
+function fixes_form_resource_agrisap_form_alter(&$form, &$form_state, $form_id) {
+   //hide "group type" and "roles and permissions"
+   $form['group_group']['#access'] = FALSE;
+   
+   //hide option for public/private groups
+   $form['group_access']['#access'] = FALSE;
+   
+   //hide the groups box for assigning content
+   $form['group_audience']['#access'] = FALSE;
+}
+*/
+
+/**
+ * Implements hook_node_form_alter().
+ * filter ALL node types
+ */
+function fixes_form_node_form_alter(&$form, &$form_state, $form_id) {
    //hide "group type" and "roles and permissions"
    $form['group_group']['#access'] = FALSE;
    
@@ -77,43 +143,22 @@ functionn fixes_form_answer_node_form_alter(&$form, &$form_state, $form_id) {
 }
 
 /**
- * Implements hook_node_form_alter().
+ * This function retrieves current count of Apache Solr Indexed documments
  */
-functionn fixes_form_forum_node_form_alter(&$form, &$form_state, $form_id) {
-   //hide "group type" and "roles and permissions"
-   $form['group_group']['#access'] = FALSE;
-   
-   //hide option for public/private groups
-   $form['group_access']['#access'] = FALSE;
-   
-   //hide the groups box for assigning content
-   $form['group_audience']['#access'] = FALSE;
+function _voa3r_fixes_solrcount_helper() {
+  
+  $result_count = 0;
+  
+  $environment = "solr";
+  try {
+    $solr = apachesolr_get_solr($environment);
+    $solr->clearCache();
+    $data = $solr->getLuke();
+    return $data->index->numDocs;
+  }
+  catch (Exception $e) {
+    return 0;
+  }
+  return 0;
 }
 
-/**
- * Implements hook_node_form_alter().
- */
-functionn fixes_form_resource_dc_node_form_alter(&$form, &$form_state, $form_id) {
-   //hide "group type" and "roles and permissions"
-   $form['group_group']['#access'] = FALSE;
-   
-   //hide option for public/private groups
-   $form['group_access']['#access'] = FALSE;
-   
-   //hide the groups box for assigning content
-   $form['group_audience']['#access'] = FALSE;
-}
-
-/**
- * Implements hook_node_form_alter().
- */
-functionn fixes_form_resource_agrisap_node_form_alter(&$form, &$form_state, $form_id) {
-   //hide "group type" and "roles and permissions"
-   $form['group_group']['#access'] = FALSE;
-   
-   //hide option for public/private groups
-   $form['group_access']['#access'] = FALSE;
-   
-   //hide the groups box for assigning content
-   $form['group_audience']['#access'] = FALSE;
-}
