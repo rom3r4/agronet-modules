@@ -162,3 +162,17 @@ function _voa3r_fixes_solrcount_helper() {
   return 0;
 }
 
+
+/**
+ * Implementation of hook_form_FORMID_alter().
+ * fix for search boxes placed in the header <-- seems not to be working!
+ */
+function fixes_form_apachesolr_search_custom_page_search_form_alter($form, &$form_state) {
+  
+    $form['#token'] = FALSE;
+    $form['#submit'][] = '_fixes_solr_search_pre_callback';
+    return $form;
+}
+function _fixes_solr_search_pre_callback($form, &$form_state){
+ //null
+}
