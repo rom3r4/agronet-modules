@@ -451,10 +451,10 @@ function drupalchat_settings_form_validate($form, &$form_state) {
 	   'chat_list_header' => $form_state['values']['drupalchat_chat_list_header'],
 	   'public_chatroom_header' => $form_state['values']['drupalchat_public_chatroom_header'],
 	   'rel' => $form_state['values']['drupalchat_rel'],
-	   'version' => '7.x-1.0-beta23',
+	   'version' => '7.x-1.0-beta25',
 	   'show_admin_list' => $form_state['values']['drupalchat_show_admin_list'],
-       'clear' => $form_state['values']['drupalchat_allow_single_message_delete'],
-       'delmessage' => $form_state['values']['drupalchat_allow_clear_room_history'],
+     'clear' => $form_state['values']['drupalchat_allow_single_message_delete'],
+     'delmessage' => $form_state['values']['drupalchat_allow_clear_room_history'],
 	   'ufc' => $form_state['values']['drupalchat_allow_user_font_color'],
     );
     if($form_state['values']['drupalchat_rel'] > DRUPALCHAT_REL_AUTH) {

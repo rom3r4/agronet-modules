@@ -535,7 +535,7 @@ function drupalchat_init() {
       'smileyURL' => base_path() . drupal_get_path('module', 'drupalchat') . '/smileys/very_emotional_emoticons-png/png-32x32/',
       'addUrl' => url('drupalchat/channel/add', array('absolute' => TRUE)),
 	  'notificationSound' => variable_get('drupalchat_notification_sound', 1),
-	  'exurl' => url('drupalchat/auth'),
+	  'exurl' => url('drupalchat/auth', array('query' => array('t' => time(),),)),
 	  'soffurl' => url('drupalchat/send-offline-message'),
 	  'chat_type' => variable_get('drupalchat_show_admin_list', 2),
     );
