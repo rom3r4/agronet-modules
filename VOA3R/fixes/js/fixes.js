@@ -13,4 +13,13 @@ $textbox.keyup(function(event){
     }
 });
 
+// jQuery colorbox responsivenes's fix
+if (window.matchMedia) {
+    // Establishing media check
+    width700Check = window.matchMedia("(max-width: 700px)");
+    if (width700Check.matches){
+      $.colorbox.remove();
+    }
+}
+
 })(jQuery, Drupal, this, this.document);
