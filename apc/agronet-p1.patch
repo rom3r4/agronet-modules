@@ -1,0 +1,165 @@
+diff --git a/apc.install b/apc.install
+index bab073d..106e500 100644
+--- a/apc.install
++++ b/apc.install
+@@ -33,3 +33,63 @@ function apc_requirements($phase) {
+ 
+   return $requirements;
+ }
++
++/**
++ * Implements hook_schema().
++ */
++function apc_schema() {
++  $schema = array();
++
++  $schema['apc_last_purge'] = array(
++    'description' => 'The time that cache bins were last purged.',
++    'fields' => array(
++      'bin' => array(
++        'type' => 'varchar',
++        'length' => 128,
++        'not null' => TRUE,
++        'default' => '',
++        'description' => 'The cache bin.',
++      ),
++      'timestamp' => array(
++        'type' => 'int',
++        'not null' => TRUE,
++        'description' => 'The timestamp of the last cache purge.',
++        'default' => 0,
++      ),
++    ),
++    'indexes' => array(
++      'bin_timestamp' => array('bin', 'timestamp'),
++    ),
++  );
++
++  return $schema;
++}
++
++/**
++ * Install the {apc_last_purge} table.
++ */
++function apc_update_7100() {
++  $schema = array(
++    'description' => 'The time that cache bins were last purged.',
++    'fields' => array(
++      'bin' => array(
++        'type' => 'varchar',
++        'length' => 128,
++        'not null' => TRUE,
++        'default' => '',
++        'description' => 'The cache bin.',
++      ),
++      'timestamp' => array(
++        'type' => 'int',
++        'not null' => TRUE,
++        'description' => 'The timestamp of the last cache purge.',
++        'default' => 0,
++      ),
++    ),
++    'indexes' => array(
++      'bin_timestamp' => array('bin', 'timestamp'),
++    ),
++  );
++
++  db_create_table('apc_last_purge', $schema);
++}
+diff --git a/drupal_apc_cache.inc b/drupal_apc_cache.inc
+index 2099c55..765c128 100644
+--- a/drupal_apc_cache.inc
++++ b/drupal_apc_cache.inc
+@@ -37,6 +37,27 @@ class DrupalAPCCache implements DrupalCacheInterface {
+   protected $prefix;
+ 
+   /**
++   * The times that bins were last purged.
++   *
++   * @var array
++   */
++  protected static $purgeTimes;
++
++  /**
++   * The time this bin was last purged.
++   *
++   * @var int
++   */
++  protected $lastPurged = 0;
++
++  /**
++   * Whether to track cache purges.
++   *
++   * @var bool
++   */
++  protected $trackPurges;
++
++  /**
+    * Get prefix for bin using the configuration.
+    *
+    * @param string $bin
+@@ -98,6 +119,17 @@ class DrupalAPCCache implements DrupalCacheInterface {
+     }
+ 
+     $this->prefix = $prefix;
++
++    if ($this->trackPurges = variable_get('apc_track_cache_purges', FALSE)) {
++      // Find out when the cache bin was last purged.
++      if (!isset(self::$purgeTimes)) {
++        self::$purgeTimes = db_query("SELECT bin, timestamp FROM {apc_last_purge}")->fetchAllKeyed();
++      }
++
++      if (isset(self::$purgeTimes[$this->bin])) {
++        $this->lastPurged = self::$purgeTimes[$this->bin];
++      }
++    }
+   }
+ 
+   /**
+@@ -147,6 +179,13 @@ class DrupalAPCCache implements DrupalCacheInterface {
+       return FALSE;
+     }
+ 
++    // The cache was cleared externally. Either on another server, or Drush. Our
++    // cache is out of date.
++    if ($cache->created < $this->lastPurged) {
++      $this->flush();
++      return FALSE;
++    }
++
+     // If enforcing a minimum cache lifetime, validate that the data is
+     // currently valid for this user before we return it by making sure the cache
+     // entry was created before the timestamp in the current session's cache
+@@ -183,7 +222,7 @@ class DrupalAPCCache implements DrupalCacheInterface {
+ 
+     $cids = array_diff($cids, array_keys($cache));
+ 
+-    return $cache;
++    return array_filter($cache);
+   }
+ 
+   function set($cid, $data, $expire = CACHE_PERMANENT, array $headers = NULL) {
+@@ -255,14 +294,17 @@ class DrupalAPCCache implements DrupalCacheInterface {
+   }
+ 
+   function clear($cid = NULL, $wildcard = FALSE) {
+-    if (drupal_is_cli() && function_exists('drush_log')) {
+-      drush_log($this->bin . '(' . $cid . ') was not cleared. APC cli uses a different memory storage than the webserver. For more info see: http://drupal.org/node/1278232', 'warning');
+-      return;
+-    }
+-
+-    // Add a get to our statistics.
++    // Add a clear to our statistics.
+     $GLOBALS['apc_statistics'][] = array('clear', $this->bin, $cid, (int)$wildcard);
+ 
++    // Mark the time this cache was purged.
++    if ($this->trackPurges && $cid === '*' && $wildcard === TRUE) {
++      db_merge('apc_last_purge')
++        ->key(array('bin' => $this->bin))
++        ->fields(array('timestamp' => time()))
++        ->execute();
++    }
++
+     if (!empty($cid) && class_exists('APCIterator')) {
+       if ($wildcard) {
+         if ($cid == '*') {

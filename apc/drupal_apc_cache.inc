@@ -4,9 +4,8 @@
  * This integrates the drupal APC cache backend.
  */
 
-// The cli mode does not run the same php.ini file and could not have
-// loaded the apc functions. Create dummy's to prevent fatal errors.
-if (drupal_is_cli() && !function_exists('apc_fetch')) {
+// Create dummy functions to prevent fatal errors.
+if (!function_exists('apc_fetch')) {
   function apc_fetch($key, $success = NULL) {
     return FALSE;
   }
@@ -36,6 +35,27 @@ class DrupalAPCCache implements DrupalCacheInterface {
    * @var string
    */
   protected $prefix;
+
+  /**
+   * The times that bins were last purged.
+   *
+   * @var array
+   */
+  protected static $purgeTimes;
+
+  /**
+   * The time this bin was last purged.
+   *
+   * @var int
+   */
+  protected $lastPurged = 0;
+
+  /**
+   * Whether to track cache purges.
+   *
+   * @var bool
+   */
+  protected $trackPurges;
 
   /**
    * Get prefix for bin using the configuration.
@@ -99,6 +119,17 @@ class DrupalAPCCache implements DrupalCacheInterface {
     }
 
     $this->prefix = $prefix;
+
+    if ($this->trackPurges = variable_get('apc_track_cache_purges', FALSE)) {
+      // Find out when the cache bin was last purged.
+      if (!isset(self::$purgeTimes)) {
+        self::$purgeTimes = db_query("SELECT bin, timestamp FROM {apc_last_purge}")->fetchAllKeyed();
+      }
+
+      if (isset(self::$purgeTimes[$this->bin])) {
+        $this->lastPurged = self::$purgeTimes[$this->bin];
+      }
+    }
   }
 
   /**
@@ -148,6 +179,13 @@ class DrupalAPCCache implements DrupalCacheInterface {
       return FALSE;
     }
 
+    // The cache was cleared externally. Either on another server, or Drush. Our
+    // cache is out of date.
+    if ($cache->created < $this->lastPurged) {
+      $this->flush();
+      return FALSE;
+    }
+
     // If enforcing a minimum cache lifetime, validate that the data is
     // currently valid for this user before we return it by making sure the cache
     // entry was created before the timestamp in the current session's cache
@@ -172,8 +210,10 @@ class DrupalAPCCache implements DrupalCacheInterface {
 
     $fetch = apc_fetch(array_keys($keys));
     $cache = array();
-    foreach ($fetch as $key => $data) {
-      $cache[$keys[$key]] = $this->prepareItem($fetch[$key]);
+    if (!empty($fetch)) {
+        foreach ($fetch as $key => $data) {
+          $cache[$keys[$key]] = $this->prepareItem($fetch[$key]);
+        }
     }
     unset($fetch);
 
@@ -182,7 +222,7 @@ class DrupalAPCCache implements DrupalCacheInterface {
 
     $cids = array_diff($cids, array_keys($cache));
 
-    return $cache;
+    return array_filter($cache);
   }
 
   function set($cid, $data, $expire = CACHE_PERMANENT, array $headers = NULL) {
@@ -254,17 +294,18 @@ class DrupalAPCCache implements DrupalCacheInterface {
   }
 
   function clear($cid = NULL, $wildcard = FALSE) {
-    $warning_shown = &drupal_static('apc_warning_shown', FALSE);
-    if (drupal_is_cli() && function_exists('drush_log') && !$warning_shown) {
-      $warning_shown = TRUE;
-      drush_log($this->bin . '(' . $cid . ') was not cleared. APC cli uses a different memory storage then the webserver. For more info see: http://drupal.org/node/1278232', 'warning');
-      return;
-    }
-
-    // Add a get to our statistics.
+    // Add a clear to our statistics.
     $GLOBALS['apc_statistics'][] = array('clear', $this->bin, $cid, (int)$wildcard);
 
-    if (!empty($cid)) {
+    // Mark the time this cache was purged.
+    if ($this->trackPurges && $cid === '*' && $wildcard === TRUE) {
+      db_merge('apc_last_purge')
+        ->key(array('bin' => $this->bin))
+        ->fields(array('timestamp' => time()))
+        ->execute();
+    }
+
+    if (!empty($cid) && class_exists('APCIterator')) {
       if ($wildcard) {
         if ($cid == '*') {
           $this->flush();

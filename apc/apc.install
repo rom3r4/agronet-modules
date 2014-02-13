@@ -10,11 +10,12 @@ function apc_requirements($phase) {
 
   // Test APC.
   $apc_enabled = (function_exists('apc_cache_info') && ($cache = @apc_cache_info('user', TRUE)));
+  $meets_version = version_compare(phpversion('apc'), '3.1.1')>= 0;
 
   $requirements['apc'] = array(
     'title' => $t('APC'),
-    'value' => $apc_enabled ? phpversion('apc') : $t('Not available'),
-    'severity' => $apc_enabled ? REQUIREMENT_OK : REQUIREMENT_ERROR,
+    'value' => $apc_enabled ? ($meets_version ? phpversion('apc') : $t('APC needs version >=3.1.1')) : $t('Not available'),
+    'severity' => $apc_enabled && $meets_version ? ($cache['num_entries'] ? REQUIREMENT_OK : REQUIREMENT_WARNING) : REQUIREMENT_ERROR,
   );
 
   if ($apc_enabled) {
@@ -31,4 +32,64 @@ function apc_requirements($phase) {
   }
 
   return $requirements;
+}
+
+/**
+ * Implements hook_schema().
+ */
+function apc_schema() {
+  $schema = array();
+
+  $schema['apc_last_purge'] = array(
+    'description' => 'The time that cache bins were last purged.',
+    'fields' => array(
+      'bin' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The cache bin.',
+      ),
+      'timestamp' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'The timestamp of the last cache purge.',
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'bin_timestamp' => array('bin', 'timestamp'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Install the {apc_last_purge} table.
+ */
+function apc_update_7100() {
+  $schema = array(
+    'description' => 'The time that cache bins were last purged.',
+    'fields' => array(
+      'bin' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The cache bin.',
+      ),
+      'timestamp' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'The timestamp of the last cache purge.',
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'bin_timestamp' => array('bin', 'timestamp'),
+    ),
+  );
+
+  db_create_table('apc_last_purge', $schema);
 }
