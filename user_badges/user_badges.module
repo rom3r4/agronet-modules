@@ -238,7 +238,7 @@ function user_badges_user_load($users) {
         // whether we filter the ones we show.
         // @TODO: This also doesn't get role badges.
         $badges_all = user_badges_get_badges($uid, array('nolimit' => TRUE));
-        
+
         $users[$uid]->badges_all = $badges_all;
         $users[$uid]->badges_count = count($badges_all);
         // If there is a limit set, then, display the badges according to the limit
@@ -308,7 +308,7 @@ function user_badges_user_categories() {
       'title' => 'Badges',
       'weight' => 5,
       'access callback' => 'user_access',
-      'access arguments' => array('change own badge assignments'), 
+      'access arguments' => array('change own badge assignments'),
     ),
   );
 }
@@ -321,7 +321,7 @@ function user_badges_user_categories() {
 function user_badges_menu_alter(&$callbacks) {
   $callbacks['user/%user_category/edit/badges']['page callback'] = 'user_badges_page';
   $callbacks['user/%user_category/edit/badges']['module'] = 'user_badges';
-  $callbacks['user/%user_category/edit/badges']['page arguments'] = array(1);  
+  $callbacks['user/%user_category/edit/badges']['page arguments'] = array(1);
   $callbacks['user/%user_category/edit/badges']['file'] = 'user_badges.module';
 }
 
@@ -513,7 +513,7 @@ function user_badges_badge_autocomplete($string = '') {
       ->execute();
 
     foreach ($result as $badge) {
-      $matches[$badge->name . ' (' . t('Badge ID') . ' ' . $badge->bid . ')'] =
+      $matches[$badge->name . ' (' . 'Badge ID' . ' ' . $badge->bid . ')'] =
         check_plain($badge->name) . ' ' . theme('user_badge', array('badge' => $badge));
     }
   }
@@ -537,7 +537,7 @@ function user_badges_badge_autocomplete($string = '') {
  *   'nobid' for a correctly formatted string with an invalid badge ID
  */
 function user_badges_badge_autocomplete_validation($value) {
-  if (preg_match('/\(' . t('Badge ID') . ' (\d+)\)/', $value, $matches)) {
+  if (preg_match('/\(' . 'Badge ID' . ' (\d+)\)/', $value, $matches)) {
     //The format was correct, but we need to check the bid exists
     $bid = $matches[1];
     $records = db_select('user_badges_badges', 'ubb')
@@ -644,14 +644,46 @@ function user_badges_change_form($form, &$form_state, $account) {
     '#collapsed' => FALSE,
   );
 
-  for ($i = 1; $i <= 5; $i++) {
-    $form['add']['add' . $i] = array(
-      '#type' => 'textfield',
-      '#title' => t('New Badge @number', array('@number' => $i)),
-      '#size' => 40,
-      '#maxlength' => 255,
-      '#autocomplete_path' => 'user_badges/autocomplete',
-    );
+  //Determine which selector type the user wants to use to set badges from their settings
+  //If the user wants to use the drop-down selector, display that if there are records in the db
+  if (variable_get('user_badges_selector_type', 1) == 0) {
+
+    //First, load all the available badges from the database by calling the following helper function
+    $result = user_badges_load_badges();
+
+    //Display the drop-down only if we get any records
+    if ($result->rowCount()) {
+      foreach ($result as $badge) {
+        $options[$badge->bid] = t('Badge') . ' ' . $badge->bid . ' ' . '-' . ' ' . $badge->name;
+      }
+
+      //Initialize the $options array, which will contain all the badges fetched from the db
+      //Add a - None - option to the badge list as Drupal core won't give it to us automatically
+      //because it is a multi select list!!
+      $options[-1] = '- None -';
+
+      //Add the drop-down multi select box to add badges
+      $form['add']['add_drop_down'] = array(
+        '#type' => 'select',
+        '#title' => t('New Badges'),
+        '#options' => $options,
+        '#multiple' => TRUE,
+      );
+    }
+  }
+  //Else, if the user wants to use the autocomplete box to set badges or if there are no records in the db,
+  //then, display, 5 autocomplete boxes for them to select from
+  else {
+    for ($i = 1; $i <= 5; $i++) {
+      //Add the autocomplete boxes to add badges
+      $form['add']['add_autocomplete' . $i] = array(
+        '#type' => 'textfield',
+        '#title' => t('New Badge @number', array('@number' => $i)),
+        '#size' => 40,
+        '#maxlength' => 255,
+        '#autocomplete_path' => 'user_badges/autocomplete',
+      );
+    }
   }
 
   if (isset($account->badges_all) && count($account->badges_all)) {
@@ -679,23 +711,44 @@ function user_badges_change_form($form, &$form_state, $account) {
     '#value' => t('Update Badges'),
     '#weight' => 10,
   );
+
   return $form;
+}
+
+/**
+ * Helper function to load all the badges from the database
+ *
+ * @return
+ *   An array of badge objects
+ */
+function user_badges_load_badges() {
+  //Load all the available badges from the database
+  $result = db_select('user_badges_badges', 'ubb')
+    ->fields('ubb')
+    ->orderBy('ubb.weight', 'asc')
+    ->orderBy('ubb.name', 'asc')
+    ->execute();
+
+  return $result;
 }
 
 /**
  * Validate user_badges_remove_form form submissions.
  */
 function user_badges_change_form_validate($form, &$form_state) {
-  for ($i = 1; $i <= 5; $i++) {
-    if (!empty($form_state['values']['add' . $i])) {
-      $validation = user_badges_badge_autocomplete_validation($form_state['values']['add' . $i]);
-      switch ($validation[1]) {
-        case 'nobid':
-          form_set_error('add' . $i, t('@value is not a valid badge ID. Try using the autocomplete function (requires javascript).', array('@value' => $validation[0])));
-          break;
-        case 'string':
-          form_set_error('add' . $i, t('"@value" is not a valid badge. Try using the autocomplete function (requires javascript).', array('@value' => $form_state['values']['add' . $i])));
-          break;
+  //If the user used the autocomplete to select badges, validate the text in them
+  if (variable_get('user_badges_selector_type', 1) == 1) {
+    for ($i = 1; $i <= 5; $i++) {
+      if (!empty($form_state['values']['add_autocomplete' . $i])) {
+        $validation = user_badges_badge_autocomplete_validation($form_state['values']['add_autocomplete' . $i]);
+        switch ($validation[1]) {
+          case 'nobid':
+            form_set_error('add_autocomplete' . $i, t('@value is not a valid badge ID. Try using the autocomplete function (requires javascript).', array('@value' => $validation[0])));
+            break;
+          case 'string':
+            form_set_error('add_autocomplete' . $i, t('"@value" is not a valid badge. Try using the autocomplete function (requires javascript).', array('@value' => $form_state['values']['add_autocomplete' . $i])));
+            break;
+        }
       }
     }
   }
@@ -709,11 +762,23 @@ function user_badges_change_form_validate($form, &$form_state) {
 function user_badges_change_form_submit($form, &$form_state) {
   $uid = $form_state['values']['uid'];
 
-  //Add badges for non-empty fields
-  for ($i = 1; $i <= 5; $i++) {
-    if (!empty($form_state['values']['add' . $i])) {
-      $validation = user_badges_badge_autocomplete_validation($form_state['values']['add' . $i]);
-      user_badges_user_add_badge($uid, $validation[0], 'user');
+  //If the user used the multi drop-down to select badges, submit them accordingly
+  if (variable_get('user_badges_selector_type', 1) == 0) {
+    foreach ($form_state['values']['add_drop_down'] as $bid) {
+      //We have to add this validation as we don't want to add the - None - case which might have been selected
+      if ($bid > 0) {
+        user_badges_user_add_badge($uid, $bid, 'user');
+      }
+    }
+  }
+  //Else, if the user used the autocomplete to select badges, submit them accordingly
+  else {
+    //Add badges for non-empty fields
+    for ($i = 1; $i <= 5; $i++) {
+      if (!empty($form_state['values']['add_autocomplete' . $i])) {
+        $validation = user_badges_badge_autocomplete_validation($form_state['values']['add_autocomplete' . $i]);
+        user_badges_user_add_badge($uid, $validation[0], 'user');
+      }
     }
   }
 
@@ -746,7 +811,7 @@ function user_badges_change_form_submit($form, &$form_state) {
  * @param $uid is the user id
  * @param $quiet suppresses message display
  */
-function user_badges_user_save($edit, $uid, $quiet = TRUE) {
+function user_badges_user_save($edit, $uid, $quiet = TRUE, $type = NULL) {
   $badges = user_badges_get_badges($uid);
 
   if (is_array($edit)) {
@@ -765,7 +830,7 @@ function user_badges_user_save($edit, $uid, $quiet = TRUE) {
 
     foreach ($added as $bid) {
       if (!array_key_exists($bid, $badges)) {
-        $success = (boolean) user_badges_user_add_badge($uid, $bid);
+        $success = (boolean) user_badges_user_add_badge($uid, $bid, $type);
       }
     }
 
@@ -775,7 +840,7 @@ function user_badges_user_save($edit, $uid, $quiet = TRUE) {
     foreach ($removed as $bid) {
       // and user has this badge
       if (array_key_exists($bid, $badges)) {
-        $success = $success && (boolean) user_badges_user_remove_badge($uid, $bid);
+        $success = $success && (boolean) user_badges_user_remove_badge($uid, $bid, $type);
       }
     }
     if ($success && !$quiet) {
@@ -797,6 +862,12 @@ function user_badges_user_save($edit, $uid, $quiet = TRUE) {
  * @return bool with query success
  */
 function user_badges_user_add_badge($uid, $bid, $type = NULL) {
+  // Integrate rules events.
+  if (module_exists('rules')) {
+    $variables = array('user' => $uid, 'badge_id' => $bid);
+    rules_invoke_event_by_args('user_badges_badge_given', $variables);
+  }
+
   user_badges_user_remove_badge($uid, $bid, $type);
   return $id = db_insert('user_badges_user')
     ->fields(array(
@@ -818,6 +889,12 @@ function user_badges_user_add_badge($uid, $bid, $type = NULL) {
  * @return bool with query success
  */
 function user_badges_user_remove_badge($uid, $bid, $type = NULL) {
+  // Integrate rules events.
+  if (module_exists('rules')) {
+    $variables = array('user' => $uid, 'badge_id' => $bid);
+    rules_invoke_event_by_args('user_badges_badge_removed', $variables);
+  }
+
   if (is_null($type)) {
     return db_delete('user_badges_user')
       ->condition('uid', $uid)
@@ -876,7 +953,7 @@ function user_badges_get_badges($uid, $options = array()) {
 
       if ($usr && variable_get('user_badges_showblocked', 0)) {
         $sql = db_query('SELECT DISTINCT b.bid, u.uid, b.weight, b.name, b.image, b.href,
-          b.unhideable, b.fixedweight, b.doesnotcounttolimit, u.userweight, b.tid, r.rid
+          b.unhideable, b.fixedweight, b.doesnotcounttolimit, u.userweight, b.tid, r.rid,
           CASE WHEN b.fixedweight = 1 THEN b.weight ELSE COALESCE(u.userweight,b.weight) END coalescedweight
           FROM {user_badges_badges} b
             INNER JOIN {user_badges_user} u ON b.bid = u.bid
@@ -910,8 +987,7 @@ function user_badges_get_badges($uid, $options = array()) {
       // Display the badge if there's no limit or if the badge is unhideable or if we are within our limit.
       if ($limit != 0 || $badge->unhideable == 1) {
         if ($uid == 'select') {
-          $badges[$uid][$badge->bid] = $badge->name;
-          $badges[$badge->bid]['#attributes'] = array('class' => array("badge badge-" . $badge->bid . " " . drupal_html_class($badge->name)));
+          $badges[$uid][$stringified_options][$badge->bid] = $badge->name;
         }
         else {
           $badges[$uid][$stringified_options][$badge->bid] = $badge;
@@ -957,7 +1033,7 @@ function user_badges_get_roles($rids = NULL, $options = array()) {
 
   $query = db_select('user_badges_roles', 'ubr');
   $query->join('user_badges_badges', 'ubb', 'ubb.bid = ubr.bid');
-  
+
   $query->fields('ubr', array('rid'))
     ->fields('ubb');
 
@@ -1187,7 +1263,7 @@ function _user_badges_build_image($badge) {
 
   //Initialize the image style
   $style_name = '';
-  
+
   //If this is a library image, then, style it according to the image style the user selected in the settings page
   if (file_valid_uri($badge->image)) {
     $style_name = variable_get('user_badges_imagecache', '');
@@ -1210,7 +1286,7 @@ function _user_badges_build_image($badge) {
   $theme = $style_name ? 'image_style' : 'image';
 
   $image = theme($theme, $variables);
-  
+
   return $image;
 }
 
@@ -1224,7 +1300,7 @@ function theme_user_badge($variables) {
 
   // We don't link the badge if there is no link and no default,
   // or if the default is overridden.
-  if (($badge->href == '' && !variable_get('user_badges_defaulthref', ''))
+  if (!isset($badge->href) || ($badge->href == '' && !variable_get('user_badges_defaulthref', ''))
     || drupal_strtolower($badge->href) == '<none>'
   ) {
     return $image;
@@ -1234,7 +1310,11 @@ function theme_user_badge($variables) {
 
     // Implement token replacement.
     if (module_exists('token')) {
-      $href = token_replace($href, array('userbadge' => $badge, 'user' => $account));
+      $vars = array('userbadge' => $badge);
+      if (isset($variables['account'])) {
+        $vars['user'] = $variables['account'];
+      }
+      $href = token_replace($href, $vars);
     }
 
     $pieces = parse_url($href);
@@ -1244,6 +1324,11 @@ function theme_user_badge($variables) {
       $pieces['path'] = $pieces['scheme'] . '://' . $pieces['host'] . $pieces['path'];
     }
 
+    // We need to convert the query to an associative array before we pass it
+    // to the l() function.
+    if (isset($pieces['query'])) {
+      $pieces['query'] = drupal_get_query_array($pieces['query']);
+    }
     return l($image, $pieces['path'], $pieces);
   }
 }
@@ -1300,7 +1385,7 @@ function user_badges_block_view($delta = 0) {
           $result = isset($account->badges) ? $account->badges : array();
           $images = array();
           foreach ($result as $badge) {
-            $images[] = theme('user_badge', array('badge' => $badge));
+            $images[] = theme('user_badge', array('badge' => $badge, 'account' => $account));
           }
           $block['subject'] = t("@name's Badges", array('@name' => $node->name));
           $block['content'] = theme('user_badge_group', array('badgeimages' => $images));
@@ -1321,18 +1406,14 @@ function user_badges_block_view($delta = 0) {
       }
       $images = array();
       foreach ($result as $badge) {
-        $images[] = theme('user_badge', array('badge' => $badge));
+        $images[] = theme('user_badge', array('badge' => $badge, 'account' => $user));
       }
       $block['subject'] = t('My Badges');
       $block['content'] = theme('user_badge_group', array('badgeimages' => $images));
       break;
 
     case 'all_badges':
-      $result = db_select('user_badges_badges', 'ubb')
-        ->fields('ubb')
-        ->orderBy('ubb.weight', 'asc')
-        ->orderBy('ubb.name', 'asc')
-        ->execute();
+      $result = user_badges_load_badges();
       $items = array();
       foreach ($result as $badge) {
         $items[] = theme('user_badge', array('badge' => $badge))

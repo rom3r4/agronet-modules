@@ -22,9 +22,9 @@ project = "user_badges"
 datestamp = "1371220087"
 
 
-; Information added by drupal.org packaging script on 2013-07-09
-version = "7.x-1.0"
+; Information added by Drupal.org packaging script on 2014-01-16
+version = "7.x-3.2"
 core = "7.x"
 project = "user_badges"
-datestamp = "1373385381"
+datestamp = "1389848908"
 

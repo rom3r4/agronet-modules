@@ -205,7 +205,7 @@ function theme_user_badges_badgelist_form($variables) {
   if ($form['pager']['#markup']) {
     $output .= drupal_render($form['pager']);
   }
-  
+
   //Render the rest of the form elements
   $output .= drupal_render_children($form);
 
@@ -477,6 +477,18 @@ function user_badges_edit_form_submit($form, &$form_state) {
     // If the badge already exists, delete it and re-insert it.
     $result = db_merge('user_badges_badges')
       ->key(array('bid' => $edit->bid));
+    // Remove image usage for old image.
+    $old_image = db_select('user_badges_badges', 'ubb')
+      ->fields('ubb', array('image'))
+      ->condition('ubb.bid', $edit->bid)
+      ->execute()
+      ->fetchField();
+    if ($old_image) {
+      $file = _user_badges_managed_file($old_image);
+      if ($file) {
+        file_usage_delete($file, 'user_badges', 'user_badge', $edit->bid);
+      }
+    }
   }
   else {
     // If the badge does not exist, insert it.
@@ -495,8 +507,8 @@ function user_badges_edit_form_submit($form, &$form_state) {
       $image = $edit->imagefromlibrary;
   }
 
-  // Add the rest of the fields.
-  $bid = $result->fields(array(
+  // Add the rest of the fields and execute.
+  $result = $result->fields(array(
     'name' => trim($edit->name),
     'image' => $image,
     'weight' => $edit->weight,
@@ -508,19 +520,45 @@ function user_badges_edit_form_submit($form, &$form_state) {
   ))
     ->execute();
 
-  if ($edit->image_location == 'upload') {
-    $bid = isset($edit->bid) ? $edit->bid : $bid;
-    // Make the uploaded file permanent.
-    $file = file_load($form_state['values']['imagefile']);
-    $file->status = FILE_STATUS_PERMANENT;
-    $file = file_move($file, 'public://badges');
-    // Record that the module is using the file.
-    file_usage_add($file, 'user_badges', 'user_badge', $bid);
-    // Update the image url for the badge
-    $result = db_merge('user_badges_badges')
-      ->key(array('bid' => $bid))
-      ->fields(array('image' => $file->uri))
-      ->execute();
+  $bid = isset($edit->bid) ? $edit->bid : $result;
+  if ($bid) {
+    if ($edit->image_location == 'upload') {
+      // Make the uploaded file permanent.
+      $file = file_load($form_state['values']['imagefile']);
+      if ($file) {
+        $file->status = FILE_STATUS_PERMANENT;
+        $file = file_move($file, 'public://badges');
+        if ($file) {
+          // Record that the module is using the file.
+          file_usage_add($file, 'user_badges', 'user_badge', $bid);
+          // Update the image url for the badge.
+          $result = db_merge('user_badges_badges')
+            ->key(array('bid' => $bid))
+            ->fields(array('image' => $file->uri))
+            ->execute();
+          $image = $file->uri;
+        }
+        else {
+          $result = FALSE;
+          watchdog('user_badges', 'Failed to save image file after upload.', array(), WATCHDOG_ERROR);
+        }
+      }
+      else {
+        $result = FALSE;
+        watchdog('user_badges', 'Failed to load image file after upload.', array(), WATCHDOG_ERROR);
+      }
+    }
+    elseif ($edit->image_location == 'library') {
+      // Record that the badge is using the file.
+      $file = _user_badges_managed_file($image);
+      if ($file) {
+        file_usage_add($file, 'user_badges', 'user_badge', $bid);
+      }
+    }
+  }
+  else {
+    $result = FALSE;
+    watchdog('user_badges', 'Invalid badge ID.', array(), WATCHDOG_ERROR);
   }
 
   if ($result) {
@@ -570,49 +608,32 @@ function user_badges_images_form($form, $form_state) {
  * Save the uploaded file or delete the selected one
  */
 function user_badges_images_form_submit($form, &$form_state) {
+  $count = 0;
   $files_to_delete = array_keys(array_filter($form_state['values']['images']));
-
   if (!empty($files_to_delete)) {
     $dir = 'public://badges';
     if (file_prepare_directory($dir)) {
       foreach ($files_to_delete as $path) {
-        $fid = db_select('file_managed', 'f')
-          ->fields('f', array('fid'))
-          ->condition('f.uri', $path)
-          ->execute()
-          ->fetchField();
-
-        // If the file is managed, verify that it is not used
-        if ($fid) {
-          $file = file_load($fid);
-          
-          //Check to see if we are using this image for any badges
-          $num_rows = db_select('user_badges_badges', 'ubb')
-            ->condition('ubb.image', $path)
-            ->countQuery()
-            ->execute()
-            ->fetchField();
-
-            //Delete the file from file_usage table in the $num_rows is 0
-            if ($num_rows == 0) {
-              file_usage_delete($file, 'user_badges');
-            }
-            
-            //Delete the file, it will be true, if successfule, false if an error occurred, or an array if it
-            //is still being used by a module
-            $file_delete_response = file_delete($file);
-            
-            //Set a message if the file hasn't been loaded, or if it could not be deleted
-            if (!$file || !$file_delete_response || is_array($file_delete_response)) {
-              drupal_set_message(t('The file %file is still being used for some badges.',
-                array('%file' => $path)), 'error');
-            }
+        $file = _user_badges_managed_file($path);
+        if ($file) {
+          if (file_usage_list($file)) {
+            drupal_set_message(t('The file %file is in use and cannot be deleted.', array('%file' => $path)), 'error');
+          }
+          else {
+            $count++;
+            file_delete($file);
+          }
         }
         else {
-          // If it is not managed, delete it
-          file_unmanaged_delete($path);
+          drupal_set_message(t('The file %file cannot be deleted by User Badges.', array('%file' => $path)), 'error');
         }
       }
+    }
+    else {
+      drupal_set_message(t('The image directory %dir cannot be accessed.', array('%dir' => $dir)), 'error');
+    }
+    if ($count > 0) {
+      drupal_set_message(t('Deleted @count image(s).', array('@count' => $count)));
     }
   }
 }
@@ -623,7 +644,7 @@ function user_badges_images_form_submit($form, &$form_state) {
 function user_badges_roles_form($form, &$form_state) {
   // No badges for the anonymous role.
   $roles = user_roles(TRUE);
-  $badges = user_badges_get_roles(NULL, array('returnbadges' => TRUE));
+  $role_badges = user_badges_get_roles(NULL, array('returnbadges' => TRUE));
 
   $form['blocked'] = array(
     '#type' => 'fieldset',
@@ -631,15 +652,6 @@ function user_badges_roles_form($form, &$form_state) {
     '#collapsible' => TRUE,
     '#collapsed' => FALSE,
     '#tree' => TRUE,
-  );
-  $form['blocked'][0] = array(
-    '#type' => 'textfield',
-    '#title' => t('blocked user'),
-    '#size' => 40,
-    '#maxlength' => 255,
-    '#autocomplete_path' => 'user_badges/autocomplete',
-    '#default_value' => isset($badges[0]) ? $badges[0]->name . ' ' . t('(Badge ID') . ' ' . $badges[0]->bid . ')' : '',
-    '#field_suffix' => isset($badges[0]) ? ' ' . t('Current:') . ' ' . $badges[0]->image : '',
   );
 
   $form['roles'] = array(
@@ -650,17 +662,62 @@ function user_badges_roles_form($form, &$form_state) {
     '#tree' => TRUE,
   );
 
-  foreach ($roles as $rid => $role) {
-    $form['roles'][$rid] = array(
+  //Determine which selector type the user wants to use to set badges from their settings
+  //If the user wants to use the drop-down selector, display that if there are records in the db
+  if (variable_get('user_badges_selector_type', 1) == 0) {
+
+    //First, load all the available badges from the database by calling the following helper function
+    $result = user_badges_load_badges();
+
+    //Display the drop-down only if we get any records
+    if ($result->rowCount()) {
+      foreach ($result as $badge) {
+        $options[$badge->bid] = t('Badge') . ' ' . $badge->bid . ' ' . '-' . ' ' . $badge->name;
+      }
+
+      $form['blocked'][0] = array(
+        '#type' => 'select',
+        '#title' => t('blocked user'),
+        '#empty_option' => '- None -',
+        '#options' => $options,
+        '#default_value' => isset($role_badges[0]) ? $role_badges[0]->bid : '',
+      );
+
+      foreach ($roles as $rid => $role) {
+        $form['roles'][$rid] = array(
+          '#type' => 'select',
+          '#title' => check_plain($role),
+          '#empty_option' => '- None -',
+          '#options' => $options,
+          '#default_value' => isset($role_badges[$rid]) ? $role_badges[$rid]->bid : '',
+        );
+      }
+    }
+  }
+  //Else, if the user wants to use the autocomplete or if there are no records in the db, display that
+  else {
+    $form['blocked'][0] = array(
       '#type' => 'textfield',
-      '#title' => check_plain($role),
+      '#title' => t('blocked user'),
+      '#size' => 40,
       '#maxlength' => 255,
       '#autocomplete_path' => 'user_badges/autocomplete',
-      '#default_value' => isset($badges[$rid]) ? $badges[$rid]->name . ' '
-        . t('(Badge ID') . ' ' . $badges[$rid]->bid . ')' : '',
-      '#field_suffix' => isset($badges[$rid]) ?
-        ' ' . t('Current:') . ' ' . _user_badges_build_image($badges[$rid]) : '',
+      '#default_value' => isset($role_badges[0]) ? $role_badges[0]->name . ' ' . t('(Badge ID') . ' ' . $role_badges[0]->bid . ')' : '',
+      '#field_suffix' => isset($role_badges[0]) ? ' ' . t('Current:') . ' ' . _user_badges_build_image($role_badges[0]) : '',
     );
+
+    foreach ($roles as $rid => $role) {
+      $form['roles'][$rid] = array(
+        '#type' => 'textfield',
+        '#title' => check_plain($role),
+        '#maxlength' => 255,
+        '#autocomplete_path' => 'user_badges/autocomplete',
+        '#default_value' => isset($role_badges[$rid]) ? $role_badges[$rid]->name . ' '
+          . t('(Badge ID') . ' ' . $role_badges[$rid]->bid . ')' : '',
+        '#field_suffix' => isset($role_badges[$rid]) ?
+          ' ' . t('Current:') . ' ' . _user_badges_build_image($role_badges[$rid]) : '',
+      );
+    }
   }
 
   $form[] = array(
@@ -674,29 +731,54 @@ function user_badges_roles_form($form, &$form_state) {
  * Validation function for user_badges_roles_form.
  */
 function user_badges_roles_form_validate($form, &$form_state) {
+  // Get the user selected values from the multi-select/autocomplete.
   $array = $form_state['values']['roles'] + $form_state['values']['blocked'];
+
+  // Initialize the $bids array which will store all the bids.
+  $bids = array();
+
   // Go through all the entries and make sure they all have a valid badge ID.
   foreach ($array as $field => $value) {
-    if (!empty($value)) {
-      // The field isn't empty, so we should validate it.
-      $validation = user_badges_badge_autocomplete_validation($value);
-      //Is it correctly formatted?
-      if ($validation[1] == 'string') {
-        if ($field == 0) {
-          form_set_error('blocked][' . $field, t('"@value" is not a valid badge name. Try using the autocomplete function (requires javascript).', array('@value' => $value)));
+    //If the selector type used to add badges was the autocomplete, then, validate the text in the autocomplete boxes
+    if (variable_get('user_badges_selector_type', 1) == 1) {
+      if (!empty($value)) {
+        // The field isn't empty, so we should validate it.
+        $validation = user_badges_badge_autocomplete_validation($value);
+        //Is it correctly formatted?
+        if ($validation[1] == 'string') {
+          if ($field == 0) {
+            form_set_error('blocked][' . $field, t('"@value" is not a valid badge name. Try using the autocomplete function (requires javascript).', array('@value' => $value)));
+          }
+          else {
+            form_set_error('roles][' . $field, t('"@value" is not a valid badge name. Try using the autocomplete function (requires javascript).', array('@value' => $value)));
+          }
         }
-        else {
-          form_set_error('roles][' . $field, t('"@value" is not a valid badge name. Try using the autocomplete function (requires javascript).', array('@value' => $value)));
+        // The format was correct, but we need to check the bid exists.
+        elseif ($validation[1] == 'nobid') {
+          if ($field == 0) {
+            form_set_error('blocked][' . $field, t('@value is not a valid badge ID. Try using the autocomplete function (requires javascript).', array('@value' => $validation[0])));
+          }
+          else {
+            form_set_error('roles][' . $field, t('@value is not a valid badge ID. Try using the autocomplete function (requires javascript).', array('@value' => $validation[0])));
+          }
         }
       }
-      // The format was correct, but we need to check the bid exists.
-      elseif ($validation[1] == 'nobid') {
-        if ($field == 0) {
-          form_set_error('blocked][' . $field, t('@value is not a valid badge ID. Try using the autocomplete function (requires javascript).', array('@value' => $validation[0])));
-        }
-        else {
-          form_set_error('roles][' . $field, t('@value is not a valid badge ID. Try using the autocomplete function (requires javascript).', array('@value' => $validation[0])));
-        }
+    }
+    // Now we add the valid bids to an array so that we can check if there
+    // are any duplicate bids assigned to a role.
+    // Only add to the array if the selected value is not 'none' (multi-select)
+    if ($value != NULL) {
+      $bids[$field] = $value;
+    }
+  }
+
+  // Now we check if there are duplicate bids in the $bids array and output
+  // an error message if there are.
+  if (isset($bids)) {
+    $duplicate_bids = array_unique(array_diff_assoc($bids, array_unique($bids)));
+    if (isset($duplicate_bids)) {
+      foreach ($duplicate_bids as $field => $bid) {
+        form_set_error('roles][' . $field, t('@bid has already been assigned to a role. Please choose another bid to assign to this role.', array('@bid' => $bid)));
       }
     }
   }
@@ -707,12 +789,16 @@ function user_badges_roles_form_validate($form, &$form_state) {
  */
 function user_badges_roles_form_submit($form, &$form_state) {
   $array = $form_state['values']['roles'] + $form_state['values']['blocked'];
-  foreach ($array as $field => &$value) {
-    // We now have a string as our badge, so just extract the bid.
-    preg_match('/\(' . t('Badge ID') . ' (\d+)\)/', $value, $matches);
-    // Transform our value into just the bid.
-    if (!empty($matches)) {
-      $value = $matches[1];
+
+  //If the selectory type used to enter badges was the autocomplete, then, extract the bid from the text
+  if (variable_get('user_badges_selector_type', 1) == 1) {
+    foreach ($array as $field => &$value) {
+      // We now have a string as our badge, so just extract the bid.
+      preg_match('/\(' . t('Badge ID') . ' (\d+)\)/', $value, $matches);
+      // Transform our value into just the bid.
+      if (!empty($matches)) {
+        $value = $matches[1];
+      }
     }
   }
   user_badges_save_roles($array);
@@ -762,6 +848,18 @@ function user_badges_settings_form($form, &$form_state) {
     '#title' => t('Show users in badge list'),
     '#default_value' => variable_get('user_badges_list_show_users', 0),
     '#description' => t('If selected, the user badges list will include all of the users who have been assigned the badge.'),
+    '#attributes' => array('class' => array('container-inline')),
+  );
+
+  $form['selector_type'] = array(
+    '#type' => 'select',
+    '#options' => array(
+      0 => t('drop-down multi-select'),
+      1 => t('autocomplete'),
+    ),
+    '#title' => t('Selector to set a badge'),
+    '#default_value' => variable_get('user_badges_selector_type', 1),
+    '#description' => t('Select which type of selector to use to set a badge.'),
     '#attributes' => array('class' => array('container-inline')),
   );
 
@@ -861,6 +959,7 @@ function user_badges_settings_form_submit($form, $form_state) {
   variable_set('user_badges_showblocked', $form_state['values']['showblocked']);
   variable_set('user_badges_userweight', $form_state['values']['userweight']);
   variable_set('user_badges_list_show_users', $form_state['values']['show_users']);
+  variable_set('user_badges_selector_type', $form_state['values']['selector_type']);
   variable_set('user_badges_imagecache', $form_state['values']['imagecache']);
   variable_set('user_badges_nobadges', $form_state['values']['nobadges']);
 
@@ -895,32 +994,82 @@ function _user_badges_images_from_library() {
   $selects = array();
 
   $path = 'public://badges';
-  file_prepare_directory($path, FILE_CREATE_DIRECTORY);
-  $dir = drupal_realpath($path);
 
-  $files = file_scan_directory($dir, '/.*\.(jpe?g|png|gif)/i', array('recurse' => FALSE));
-  foreach ($files as $file) {
-    $image = image_get_info($file->uri);
-    $file->filepath = $path . '/' . $file->filename;
+  if (file_prepare_directory($path, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+    // Scan directory for images in supported formats.
+    $files = file_scan_directory($path, '/.*\.(jpe?g|png|gif)/i', array('recurse' => FALSE));
+    foreach ($files as $file) {
+      $image = image_get_info($file->uri);
+      if ($image) {
+        $file->filepath = $path . '/' . $file->filename;
 
-    $style_name = variable_get('user_badges_imagecache', '');
-    $variables = array('path' => $file->filepath);
+        $style_name = variable_get('user_badges_imagecache', '');
+        $variables = array('path' => $file->filepath);
 
-    if ($style_name) {
-      $theme = 'image_style';
-      $variables['style_name'] = $style_name;
+        if ($style_name) {
+          $theme = 'image_style';
+          $variables['style_name'] = $style_name;
+        }
+        else {
+          $theme = 'image';
+          $variables['width'] = $image['width'];
+          $variables['height'] = $image['height'];
+        }
+
+        $selects[$file->filepath] = (object) array('image' => theme($theme, $variables), 'file' => $file);
+
+        // Ensures this file is managed in database.
+        if (!_user_badges_managed_file($file->filepath)) {
+          watchdog('user_badges', 'Failed to manage detected image file: @file', array('@file' => $file->filepath), WATCHDOG_ERROR);
+        }
+      }
     }
-    else {
-      $theme = 'image';
-      $variables['width'] = $image['width'];
-      $variables['height'] = $image['height'];
-    }
-
-    $selects[$file->filepath] = (object) array('image' => theme($theme, $variables), 'file' => $file);
   }
-
+  else {
+    // 'public://badges' directory could not be created or has wrong permissions.
+    watchdog('user_badges', 'Scanning for badge images library failed.  Badges directory could not be created or has wrong permissions: @dir', array('@dir' => $path), WATCHDOG_ERROR);
+  }
   return $selects;
 }
+
+
+/**
+ * Convert a uri into a managed file object.
+ *
+ * Loads existing file object for uri
+ * or creates new managed file entry.
+ *
+ * @return object|false
+ *   A file object on success or FALSE in the event of an error.
+ */
+function _user_badges_managed_file($file_uri) {
+  global $user;
+  if (file_valid_uri($file_uri)) {
+    // Check if there's an entry in the database for this file.
+    $fid = db_select('file_managed', 'f')
+          ->fields('f', array('fid'))
+          ->condition('f.uri', $file_uri)
+          ->execute()
+          ->fetchField();
+
+    if ($fid) {
+      return file_load($fid);
+    }
+    else {
+      // If no entry found, we need to save this to the database.
+      $fileob = new stdClass();
+      $fileob->fid = NULL;
+      $fileob->uri = $file_uri;
+      $fileob->filename = drupal_basename($fileob->uri);
+      $fileob->filemime = file_get_mimetype($fileob->uri);
+      $fileob->uid = $user->uid;
+      $fileob->status = FILE_STATUS_PERMANENT;
+      return file_save($fileob);
+    }
+  }
+  return FALSE;
+}
+
 
 /**
  * Get terms belonging to a vocabulary. Can be used in the form's #options field.
@@ -965,14 +1114,9 @@ function user_badges_delete_form_submit($form, &$form_state) {
   // Let other modules know about this.
   module_invoke_all('user_badges_delete', $badge);
 
-  if (file_valid_uri($badge->image)) {
-    // Also delete file usage.
-    $fid = db_select('file_managed', 'f')
-      ->fields('f', array('fid'))
-      ->condition('f.uri', $badge->image)
-      ->execute()
-      ->fetchField();
-    $file = file_load($fid);
+  // Remove file usage for image file.
+  $file = _user_badges_managed_file($badge->image);
+  if ($file) {
     file_usage_delete($file, 'user_badges', 'user_badge', $badge->bid);
   }
 
@@ -988,6 +1132,6 @@ function user_badges_delete_form_submit($form, &$form_state) {
     ->condition('bid', $bid)
     ->execute();
 
-  drupal_set_message(t('The @name badge has been deleted.', array('@name' => $name)));
+  drupal_set_message(t('The @name badge has been deleted.', array('@name' => $badge->name)));
   $form_state['redirect'] = USER_BADGES_ADMIN_PATH;
 }
